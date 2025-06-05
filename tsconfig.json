@@ -1,5 +1,8 @@
 {
   "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    
     "target": "ESNext",
     "module": "commonjs",
     "allowJs": true,

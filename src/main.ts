@@ -1,6 +1,51 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
+
+// import Docker from 'dockerode';
+const Docker = require('dockerode'); // using require to avoid ESM issues with dockerode
+
+const docker = new Docker(); // talks to local /var/run/docker.sock by default
+const CONTAINER_NAME = 'mc_launcher_server';
+
+async function up() {
+  // Re‑use container if it’s already there
+  let container = docker.getContainer(CONTAINER_NAME);
+  try { await container.inspect(); }
+  catch {           // not found ⇒ create
+    container = await docker.createContainer({
+      Image: 'itzg/minecraft-server',
+      name:  CONTAINER_NAME,
+      Env:   ['EULA=TRUE'],        // add more later
+      HostConfig: {
+        PortBindings: { '25565/tcp': [{ HostPort: '25565' }] }
+      }
+    });
+  }
+  await container.start();
+  return container;
+}
+
+async function status() {
+  try {
+    const data = await docker.getContainer(CONTAINER_NAME).inspect();
+    return { running: data.State.Running, status: data.State.Status };
+  } catch {
+    return { running: false, status: 'not-created' };
+  }
+}
+
+async function down() {
+  try { 
+    const c = docker.getContainer(CONTAINER_NAME);
+    await c.stop(); await c.remove({ force: true });
+  } catch { /* noop */ }
+}
+
+/* ---------- IPC plumbing ---------- */
+ipcMain.handle('mc:start',  () => up()     );
+ipcMain.handle('mc:stop',   () => down()   );
+ipcMain.handle('mc:status', () => status() );
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -23,7 +68,7 @@ const createWindow = () => {
   } else {
     mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
   }
-
+  
   // Open the DevTools.
   mainWindow.webContents.openDevTools();
 };
