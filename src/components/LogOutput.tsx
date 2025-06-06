@@ -18,7 +18,6 @@ const LogOutput = () => {
   return (
     <textarea
       readOnly
-      rows={10}
       className="w-full mt-4 p-2 font-mono bg-neutral-900 text-neutral-200 rounded"
       value={lines.join("\n")}
     />

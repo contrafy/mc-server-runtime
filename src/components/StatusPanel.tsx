@@ -22,11 +22,13 @@ export default function StatusPanel() {
   const handleStop  = () => window.mcApi.stop();
 
   return (
-    <div className="p-4">
+    <div className="p-4 flex flex-col gap-4">
       <h2>Minecraft Server Status</h2>
       <p>{info.status}</p>
-      <button onClick={handleStart} disabled={info.running}>Start</button>
-      <button onClick={handleStop}  disabled={!info.running}>Stop</button>
+      <div className="flex gap-2">
+        <button onClick={handleStart} disabled={info.running}>Start</button>
+        <button onClick={handleStop}  disabled={!info.running}>Stop</button>
+      </div>
 
       <LogOutput />
     </div>
