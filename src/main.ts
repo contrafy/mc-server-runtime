@@ -3,7 +3,7 @@ import path from 'node:path';
 import started from 'electron-squirrel-startup';
 
 import os from 'node:os';
-import stream from "stream";
+import { Readable as NodeStream } from "node:stream";
 
 // import Docker from 'dockerode';
 import Docker, { DockerOptions } from 'dockerode'; // using require to avoid ESM issues with dockerode
@@ -30,6 +30,7 @@ function getDockerOptions(): DockerOptions {
 
 const docker = new Docker(getDockerOptions()); // talks to local /var/run/docker.sock by default
 const CONTAINER_NAME = 'mc_launcher_server';
+let liveLogStream: NodeStream | null = null;
 
 /* ───────── Log streaming helpers ───────── */
 function broadcast(channel: string, payload?: unknown) {
@@ -37,31 +38,30 @@ function broadcast(channel: string, payload?: unknown) {
 }
 
 function broadcastLogStream() {
+  // close any previous stream
+  liveLogStream?.destroy();
+
   const cont = docker.getContainer(CONTAINER_NAME);
-
-  cont.inspect((err, info) => {
-    if (err || !info.State.Running) return;  // nothing to stream yet
-
-    cont.logs(
-      { follow: true, stdout: true, stderr: true, tail: 10 },
-      (e: Error | null, logStream?: stream.Readable) => {
-        if (e || !logStream) {
-          broadcast("mc:logs:data", `⚠️  ${e?.message ?? "no logs"}`);
-          return;
-        }
-
-        logStream.on("data", chunk => {
-          const line = chunk.slice(8).toString("utf8");
-          line.split(/\r?\n/).forEach((l: string) => l && broadcast("mc:logs:data", l));
-        });
-
-        logStream.on("end", () => broadcast("mc:logs:data", "[log stream ended]"));
-
-        // clean up when all windows gone
-        app.once("before-quit", () => logStream.destroy());
+  cont.logs(
+    { follow: true, stdout: true, stderr: true, tail: 10 },
+    (err, stream?: NodeStream) => {
+      if (err || !stream) {
+        broadcast("mc:logs:data", `⚠️  ${err?.message ?? "no logs"}`);
+        return;
       }
-    );
-  });
+
+      liveLogStream = stream;
+
+      stream.on("data", chunk => {
+        // first 8 bytes are Docker's multiplex header
+        const text = chunk.slice(8).toString("utf8");
+        text.split(/\r?\n/).forEach(l => l && broadcast("mc:logs:data", l));
+      });
+
+      stream.on("end", () => broadcast("mc:logs:data", "[log stream ended]"));
+      app.once("before-quit", () => stream.destroy());
+    }
+  );
 }
 
 async function up() {

@@ -2,6 +2,8 @@
 import { useEffect, useState } from 'react';
 import LogOutput from './LogOutput';
 
+import { Button } from "@/components/ui/button";
+
 type McStatus = { running: boolean; status: string };
 
 export default function StatusPanel() {
@@ -26,8 +28,8 @@ export default function StatusPanel() {
       <h2>Minecraft Server Status</h2>
       <p>{info.status}</p>
       <div className="flex gap-2">
-        <button onClick={handleStart} disabled={info.running}>Start</button>
-        <button onClick={handleStop}  disabled={!info.running}>Stop</button>
+        <Button onClick={handleStart} disabled={info.running}>Start</Button>
+        <Button onClick={handleStop}  disabled={!info.running}>Stop</Button>
       </div>
 
       <LogOutput />
