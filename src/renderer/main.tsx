@@ -9,7 +9,7 @@ const App = () => {
     const info = useMcStatus();
 
     return (
-    <div className="flex h-screen">
+    <div className="flex h-screen mx-auto">
         {/* Left = status/logs */}
         <section className="w-1/2 border-r border-neutral-800 overflow-y-auto">
         <StatusPanel info={info} />
