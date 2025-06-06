@@ -2,10 +2,32 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 
-// import Docker from 'dockerode';
-const Docker = require('dockerode'); // using require to avoid ESM issues with dockerode
+import os from 'node:os';
 
-const docker = new Docker(); // talks to local /var/run/docker.sock by default
+// import Docker from 'dockerode';
+import Docker, { DockerOptions } from 'dockerode'; // using require to avoid ESM issues with dockerode
+
+function getDockerOptions(): DockerOptions {
+  const platform = os.platform();
+
+  if (platform === 'win32') {
+    // Use named pipe on Windows
+    console.log('Detected Windows environment');
+    return { socketPath: '//./pipe/docker_engine' };
+  }
+
+  // Check for Docker Desktop on WSL2 (shared socket)
+  if (platform === 'linux' && process.env.WSL_DISTRO_NAME) {
+    console.log('Detected WSL2 environment');
+    return { socketPath: '/mnt/wsl/docker-desktop/shared-sockets/guest-services/docker.sock' };
+  }
+
+  // Default to standard Unix socket
+  console.log('Detected Unix-like environment (Linux, macOS)');
+  return { socketPath: '/var/run/docker.sock' };
+}
+
+const docker = new Docker(getDockerOptions()); // talks to local /var/run/docker.sock by default
 const CONTAINER_NAME = 'mc_launcher_server';
 
 async function up() {
@@ -43,7 +65,10 @@ async function down() {
 }
 
 /* ---------- IPC plumbing ---------- */
-ipcMain.handle('mc:start',  () => up()     );
+ipcMain.handle('mc:start', async () => {
+  await up();
+  return { started: true };
+});
 ipcMain.handle('mc:stop',   () => down()   );
 ipcMain.handle('mc:status', () => status() );
 
