@@ -66,10 +66,10 @@ function broadcastLogStream() {
 
 async function up() {
   // Re‑use container if it’s already there
-  broadcast("mc:logs:clear");   // wipe old logs
-
   let container = docker.getContainer(CONTAINER_NAME);
-  try { await container.inspect(); }
+  try { 
+    await container.inspect(); 
+  }
   catch {           // not found ⇒ create
     broadcast("mc:logs:clear");   // wipe old logs
     container = await docker.createContainer({
