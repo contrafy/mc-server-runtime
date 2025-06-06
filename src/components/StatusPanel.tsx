@@ -1,5 +1,6 @@
 // src/StatusPanel.tsx
 import { useEffect, useState } from 'react';
+import LogOutput from './LogOutput';
 
 type McStatus = { running: boolean; status: string };
 
@@ -26,6 +27,8 @@ export default function StatusPanel() {
       <p>{info.status}</p>
       <button onClick={handleStart} disabled={info.running}>Start</button>
       <button onClick={handleStop}  disabled={!info.running}>Stop</button>
+
+      <LogOutput />
     </div>
   );
 }

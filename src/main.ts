@@ -3,6 +3,7 @@ import path from 'node:path';
 import started from 'electron-squirrel-startup';
 
 import os from 'node:os';
+import stream from "stream";
 
 // import Docker from 'dockerode';
 import Docker, { DockerOptions } from 'dockerode'; // using require to avoid ESM issues with dockerode
@@ -30,11 +31,47 @@ function getDockerOptions(): DockerOptions {
 const docker = new Docker(getDockerOptions()); // talks to local /var/run/docker.sock by default
 const CONTAINER_NAME = 'mc_launcher_server';
 
+/* ───────── Log streaming helpers ───────── */
+function broadcast(channel: string, payload?: unknown) {
+  BrowserWindow.getAllWindows().forEach(w => w.webContents.send(channel, payload));
+}
+
+function broadcastLogStream() {
+  const cont = docker.getContainer(CONTAINER_NAME);
+
+  cont.inspect((err, info) => {
+    if (err || !info.State.Running) return;  // nothing to stream yet
+
+    cont.logs(
+      { follow: true, stdout: true, stderr: true, tail: 10 },
+      (e: Error | null, logStream?: stream.Readable) => {
+        if (e || !logStream) {
+          broadcast("mc:logs:data", `⚠️  ${e?.message ?? "no logs"}`);
+          return;
+        }
+
+        logStream.on("data", chunk => {
+          const line = chunk.slice(8).toString("utf8");
+          line.split(/\r?\n/).forEach((l: string) => l && broadcast("mc:logs:data", l));
+        });
+
+        logStream.on("end", () => broadcast("mc:logs:data", "[log stream ended]"));
+
+        // clean up when all windows gone
+        app.once("before-quit", () => logStream.destroy());
+      }
+    );
+  });
+}
+
 async function up() {
   // Re‑use container if it’s already there
+  broadcast("mc:logs:clear");   // wipe old logs
+
   let container = docker.getContainer(CONTAINER_NAME);
   try { await container.inspect(); }
   catch {           // not found ⇒ create
+    broadcast("mc:logs:clear");   // wipe old logs
     container = await docker.createContainer({
       Image: 'itzg/minecraft-server',
       name:  CONTAINER_NAME,
@@ -45,6 +82,9 @@ async function up() {
     });
   }
   await container.start();
+
+  broadcastLogStream();         // start fresh stream
+
   return container;
 }
 
@@ -58,13 +98,16 @@ async function status() {
 }
 
 async function down() {
-  try { 
+  try {
     const c = docker.getContainer(CONTAINER_NAME);
-    await c.stop(); await c.remove({ force: true });
-  } catch { /* noop */ }
+    await c.stop();
+    await c.remove({ force: true });
+  } catch {/* noop */}
+  broadcast("mc:logs:clear");   // clear textarea when stopped
 }
 
 /* ---------- IPC plumbing ---------- */
+ipcMain.on("mc:logs:subscribe", e => {});
 ipcMain.handle('mc:start', async () => {
   await up();
   return { started: true };
