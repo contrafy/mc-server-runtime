@@ -1,94 +1,79 @@
 // src/components/SettingsForm.tsx
-/**
- * A growing form for Minecraft‑server settings.
- * Everything maps 1‑to‑1 to an ENV‑VAR consumed by itzg/minecraft-server.
- *
- * TODO (next steps)
- *  • Wire to main‑process IPC (`mc:settings:save`)
- *  • Add sub‑form for mods / modpacks
- *  • Validation
- */
-
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Select, SelectItem, SelectTrigger, SelectContent } from "@/components/ui/select";
+import {
+  Select, SelectItem, SelectTrigger, SelectContent
+} from "@/components/ui/select";
+import { McStatus } from "../hooks/useMcStatus";
 
-type FormState = {
-  SERVER_NAME: string;
-  VERSION: string;
-  MAX_PLAYERS: number;
-  DIFFICULTY: "peaceful" | "easy" | "normal" | "hard";
-  MOTD: string;
-};
+interface Props { info: McStatus }
 
-const defaultState: FormState = {
-  SERVER_NAME: "My Awesome Server",
-  VERSION: "LATEST",
-  MAX_PLAYERS: 20,
-  DIFFICULTY: "normal",
-  MOTD: "Welcome to my server!",
-};
+export default function SettingsForm({ info }: Props) {
+  const [form, setForm] = useState({
+    SERVER_NAME: "My Awesome Server",
+    VERSION: "LATEST",
+    MAX_PLAYERS: 20,
+    DIFFICULTY: "normal",
+    MOTD: "Welcome to my server!"
+  });
 
-export default function SettingsForm() {
-  const [form, setForm] = useState<FormState>(defaultState);
+  const disabled = info.running;          // single flag drives everything
+  const buttonLabel = info.running ? "Running" : "Run";
 
-  const handleChange = <K extends keyof FormState>(key: K, value: FormState[K]) =>
-    setForm(f => ({ ...f, [key]: value }));
+  const change = (k: keyof typeof form, v: any) =>
+    setForm(f => ({ ...f, [k]: v }));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // TEMP: just log.  Next step -> window.mcApi.saveSettings(form)
-    console.log("MC-Settings →", form);
+    if (info.running) return;             // locked
+    console.log("Would pass to mc:start with env:", form);
+    // (next step) window.mcApi.start(form)
   };
 
   return (
-    <form onSubmit={handleSubmit} className="p-4 flex flex-col gap-4 h-full overflow-y-auto">
+    <form onSubmit={handleSubmit} className="p-4 flex flex-col gap-4 h-full">
       <h2 className="text-lg font-semibold">Server Settings</h2>
 
-      {/* Server name */}
+      {/* SERVER_NAME */}
       <div className="space-y-1">
-        <Label htmlFor="serverName">Server Name</Label>
+        <Label htmlFor="name">Server Name</Label>
         <Input
-          id="serverName"
+          id="name" disabled={disabled}
           value={form.SERVER_NAME}
-          onChange={e => handleChange("SERVER_NAME", e.target.value)}
+          onChange={e => change("SERVER_NAME", e.target.value)}
         />
       </div>
 
-      {/* Minecraft version */}
+      {/* VERSION */}
       <div className="space-y-1">
-        <Label htmlFor="version">MC Version</Label>
+        <Label htmlFor="ver">MC Version</Label>
         <Input
-          id="version"
-          placeholder="e.g. 1.20.6 or 'LATEST'"
+          id="ver" disabled={disabled}
+          placeholder="e.g. 1.20.6"
           value={form.VERSION}
-          onChange={e => handleChange("VERSION", e.target.value)}
+          onChange={e => change("VERSION", e.target.value)}
         />
       </div>
 
-      {/* Max players */}
+      {/* MAX_PLAYERS */}
       <div className="space-y-1">
-        <Label htmlFor="maxPlayers">Max Players</Label>
+        <Label htmlFor="max">Max Players</Label>
         <Input
-          id="maxPlayers"
-          type="number"
-          min={1}
-          max={100}
+          id="max" type="number" min={1} max={100} disabled={disabled}
           value={form.MAX_PLAYERS}
-          onChange={e => handleChange("MAX_PLAYERS", Number(e.target.value))}
+          onChange={e => change("MAX_PLAYERS", Number(e.target.value))}
         />
       </div>
 
-      {/* Difficulty */}
+      {/* DIFFICULTY */}
       <div className="space-y-1">
         <Label>Difficulty</Label>
         <Select
+          disabled={disabled}
           value={form.DIFFICULTY}
-          onValueChange={value =>
-            handleChange("DIFFICULTY", value as FormState["DIFFICULTY"])
-          }
+          onValueChange={v => change("DIFFICULTY", v)}
         >
           <SelectTrigger className="w-full" />
           <SelectContent>
@@ -104,15 +89,15 @@ export default function SettingsForm() {
       <div className="space-y-1">
         <Label htmlFor="motd">MOTD</Label>
         <Input
-          id="motd"
+          id="motd" disabled={disabled}
           value={form.MOTD}
-          onChange={e => handleChange("MOTD", e.target.value)}
+          onChange={e => change("MOTD", e.target.value)}
         />
       </div>
 
-      <div className="space-y-4">
-        <Button type="submit" className="w-full">
-          Save (stub)
+      <div className="mt-auto">
+        <Button disabled={disabled} type="submit" className="w-full">
+          {buttonLabel}
         </Button>
       </div>
     </form>

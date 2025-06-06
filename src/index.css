@@ -11,6 +11,13 @@ body {
   padding: 2rem;
 }
 
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  overflow: hidden;   /* page never scrolls */
+}
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
