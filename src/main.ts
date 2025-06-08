@@ -3,9 +3,9 @@ import path from 'node:path';
 import started from 'electron-squirrel-startup';
 
 import os from 'node:os';
+import fs from 'node:fs';
 import { Readable as NodeStream } from "node:stream";
 
-// import Docker from 'dockerode';
 import Docker, { DockerOptions } from 'dockerode'; // using require to avoid ESM issues with dockerode
 
 function getDockerOptions(): DockerOptions {
@@ -23,6 +23,15 @@ function getDockerOptions(): DockerOptions {
     return { socketPath: '/mnt/wsl/docker-desktop/shared-sockets/guest-services/docker.sock' };
   }
 
+  // rootless docker setup
+  const xdgRuntime = process.env.XDG_RUNTIME_DIR;         // /run/user/$UID
+  if (xdgRuntime) {
+    const rootlessSock = path.join(xdgRuntime, 'docker.sock');
+    if (fs.existsSync(rootlessSock)) {
+      return { socketPath: rootlessSock };
+    }
+  }
+
   // Default to standard Unix socket
   console.log('Detected Unix-like environment (Linux, macOS)');
   return { socketPath: '/var/run/docker.sock' };
@@ -30,6 +39,8 @@ function getDockerOptions(): DockerOptions {
 
 const docker = new Docker(getDockerOptions()); // talks to local /var/run/docker.sock by default
 const CONTAINER_NAME = 'mc_launcher_server';
+const IMAGE   = 'itzg/minecraft-server';
+
 let liveLogStream: NodeStream | null = null;
 
 /* ───────── Log streaming helpers ───────── */
@@ -64,13 +75,38 @@ function broadcastLogStream() {
   );
 }
 
+/**
+ * Pull IMAGE only if it is not already present locally.
+ */
+async function ensureImage(imageName: string) {
+  try {
+    await docker.getImage(imageName).inspect();         // already there → OK
+    return;
+  } catch (_) {
+    // Absent → pull it
+    console.log(`Pulling ${imageName} …`);
+    await new Promise<void>((resolve, reject) => {
+      docker.pull(imageName, (err: any, stream: any) => {
+        if (err) return reject(err);
+        // followProgress gives you a single callback when done
+        docker.modem.followProgress(stream, (err) =>
+          err ? reject(err) : resolve()
+        );
+      });
+    });
+  }
+}
+
 async function up() {
   // Re‑use container if it’s already there
   let container = docker.getContainer(CONTAINER_NAME);
+
   try { 
     await container.inspect(); 
   }
   catch {           // not found ⇒ create
+    await ensureImage(IMAGE);
+    
     broadcast("mc:logs:clear");   // wipe old logs
     container = await docker.createContainer({
       Image: 'itzg/minecraft-server',
