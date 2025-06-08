@@ -1,9 +1,10 @@
+import type { ServerOptions } from './types/ServerOptions';
 export {};
 
 declare global {
   interface Window {
     mcApi: {
-      start(): Promise<void>;
+      start(opts: ServerOptions): Promise<void>;
       stop(): Promise<void>;
       status(): Promise<{ running: boolean; status: string }>;
       /* log helpers */

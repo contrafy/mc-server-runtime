@@ -1,12 +1,17 @@
 // src/components/StatusPanel.tsx
 import { Button } from "@/components/ui/button";
-import LogOutput from "./LogOutput";
+import LogOutput  from "./LogOutput";
 import { McStatus } from "../hooks/useMcStatus";
+import { ServerOptions } from "@/types/ServerOptions";
 
-interface Props { info: McStatus }
+interface Props {
+  info: McStatus;
+  opts: ServerOptions;
+}
 
-export default function StatusPanel({ info }: Props) {
-  const handleStart = () => window.mcApi.start();
+export default function StatusPanel({ info, opts }: Props) {
+  /* Always launch with the *current* form contents */
+  const handleStart = () => window.mcApi.start(opts);
   const handleStop  = () => window.mcApi.stop();
 
   return (
@@ -23,3 +28,4 @@ export default function StatusPanel({ info }: Props) {
     </div>
   );
 }
+

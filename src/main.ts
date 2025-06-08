@@ -1,12 +1,14 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
-
 import os from 'node:os';
 import fs from 'node:fs';
 import { Readable as NodeStream } from "node:stream";
 
+import type { ServerOptions, Difficulty, MinecraftVersion } from './types/ServerOptions';
+
 import Docker, { DockerOptions } from 'dockerode'; // using require to avoid ESM issues with dockerode
+import { Server } from 'node:http';
 
 function getDockerOptions(): DockerOptions {
   const platform = os.platform();
@@ -97,30 +99,59 @@ async function ensureImage(imageName: string) {
   }
 }
 
-async function up() {
-  // Re‑use container if it’s already there
+/* ───────── helper to validate and convert server options into corresponding env vars ───────── */
+function buildEnv(opts: ServerOptions): string[] {
+  // 1. Basic input validation with graceful fallback + loud logs
+  const allowedVers: MinecraftVersion[] = ['1.20.1', '1.16.5'];
+  const allowedDiff: Difficulty[]       = ['peaceful', 'easy', 'normal', 'hard'];
+
+  if (!allowedVers.includes(opts.VERSION as MinecraftVersion)) {
+    console.warn(`[mc-launcher] Unsupported version "${opts.VERSION}" – falling back to 1.20.1`);
+    opts.VERSION = '1.20.1';
+  }
+  if (!allowedDiff.includes(opts.DIFFICULTY as Difficulty)) {
+    console.warn(`[mc-launcher] Unsupported difficulty "${opts.DIFFICULTY}" – falling back to normal`);
+    opts.DIFFICULTY = 'normal';
+  }
+
+  /* 2. Map to itzg env‑vars.
+       Docs: https://github.com/itzg/docker-minecraft-server#server-configuration */
+  return [
+    'EULA=TRUE',
+    `SERVER_NAME=${opts.SERVER_NAME}`,
+    `VERSION=${opts.VERSION}`,
+    `MAX_PLAYERS=${opts.MAX_PLAYERS}`,
+    `DIFFICULTY=${opts.DIFFICULTY}`,
+    `MOTD=${opts.MOTD}`
+  ];
+}
+
+/* ───────── brings up a server with the given opts (ServerOptions) ───────── */
+async function up(opts: ServerOptions) {
+  console.log('[mc-launcher] Requested start with:', opts);
+
   let container = docker.getContainer(CONTAINER_NAME);
 
-  try { 
-    await container.inspect(); 
-  }
-  catch {           // not found ⇒ create
+  try {
+    await container.inspect();     // already exists → reuse
+  } catch {
+    // container missing → pull image (if needed) then create
     await ensureImage(IMAGE);
-    
-    broadcast("mc:logs:clear");   // wipe old logs
+
+    broadcast('mc:logs:clear');
+
     container = await docker.createContainer({
-      Image: 'itzg/minecraft-server',
-      name:  CONTAINER_NAME,
-      Env:   ['EULA=TRUE'],        // add more later
-      HostConfig: {
+      Image: IMAGE,
+      name : CONTAINER_NAME,
+      Env  : buildEnv(opts),        // inject custom env
+      HostConfig: {                 // leave ports hard‑coded for MVP
         PortBindings: { '25565/tcp': [{ HostPort: '25565' }] }
       }
     });
   }
+
   await container.start();
-
-  broadcastLogStream();         // start fresh stream
-
+  broadcastLogStream();
   return container;
 }
 
@@ -144,8 +175,8 @@ async function down() {
 
 /* ---------- IPC plumbing ---------- */
 ipcMain.on("mc:logs:subscribe", e => {});
-ipcMain.handle('mc:start', async () => {
-  await up();
+ipcMain.handle('mc:start', async (_e, opts: ServerOptions) => {
+  await up(opts);
   return { started: true };
 });
 ipcMain.handle('mc:stop',   () => down()   );
